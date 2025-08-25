@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router";
 import { useSelector } from "react-redux";
 import type { RootState } from "../app/store";
+import { useAuth } from "../hooks/useAuth";
 
 export default function Protected({ roles }: { roles?: Array<"user"|"agent"|"admin"> }) {
   const token = useSelector((s: RootState) => s.auth.token);
