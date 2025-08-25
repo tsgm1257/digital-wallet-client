@@ -14,9 +14,7 @@ export default function Contact() {
 
   const onChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
+  ) => setForm({ ...form, [e.target.name]: e.target.value });
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +31,7 @@ export default function Contact() {
 
     try {
       setLoading(true);
-      // simulate a network request
+      // simulate network call
       await new Promise((r) => setTimeout(r, 800));
       toast.success("Thanks! We’ll be in touch.");
       setForm({ name: "", email: "", message: "" });

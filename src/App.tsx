@@ -14,6 +14,7 @@ import DashboardAdmin from "./pages/DashboardAdmin";
 import Protected from "./routes/Protected";
 import { Toaster } from "react-hot-toast";
 import Settings from "./pages/Settings";
+import NotFound from "./pages/NotFound";
 
 function Placeholder({ title }: { title: string }) {
   return <div className="container mx-auto px-3 py-10">{title}</div>;
@@ -51,7 +52,7 @@ export default function App() {
         </Route>
 
         {/* Fallback */}
-        <Route path="*" element={<div className="container mx-auto px-3 py-10">Not Found</div>} />
+        <Route path="*" element={<NotFound />} />
       </Routes>
       <Footer />
     </BrowserRouter>
