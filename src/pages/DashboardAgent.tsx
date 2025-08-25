@@ -1,44 +1,81 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
-import { useCashInMutation, useCashOutMutation, useGetMyTransactionsQuery } from "../redux/api/txnApi";
+import {
+  useGetMyTransactionsQuery,
+  useCashInMutation,
+  useCashOutMutation,
+  type TxType,
+} from "../redux/api/txnApi";
 import { useLazyLookupUserQuery } from "../redux/api/profileApi";
 import Pagination from "../components/Pagination";
-
-/**
- * NOTE on username vs email/phone:
- * Backend cash-in/out expects a "username" (not email/phone).
- * We accept username/email/phone from the agent, then call /users/lookup
- * and pass the found user's username to the cash-in/out mutation.
- */
+import AreaVolumeChart from "../components/charts/AreaVolumeChart";
+import PieTypeChart from "../components/charts/PieTypeChart";
+import { buildDailySeries, daysAgoISO, sumByType } from "../utils/txAgg";
 
 export default function DashboardAgent() {
-  // Filters for handled transactions
+  // ===== Table filters =====
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
-  const [type, setType] = useState<"" | "deposit" | "withdraw" | "send">("");
+  const [type, setType] = useState<"" | TxType>("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  const { data: txns, isLoading: txLoading, refetch } = useGetMyTransactionsQuery({
-    page, limit, type: type || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined,
+  const {
+    data: txns,
+    isLoading: txLoading,
+    refetch: refetchTxns,
+  } = useGetMyTransactionsQuery({
+    page,
+    limit,
+    type: (type || undefined) as TxType | undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
   });
 
-  // Forms state
-  const [recipient, setRecipient] = useState("");
-  const [amountIn, setAmountIn] = useState<number | "">("");
-  const [amountOut, setAmountOut] = useState<number | "">("");
+  // ===== Charts (last 30 days) =====
+  const { data: txnsForChart, isLoading: chartLoading } =
+    useGetMyTransactionsQuery({
+      page: 1,
+      limit: 1000,
+      dateFrom: daysAgoISO(30),
+    });
 
+  const daily = useMemo(
+    () => buildDailySeries(txnsForChart?.data, 30),
+    [txnsForChart?.data]
+  );
+  const byType = useMemo(
+    () => sumByType(txnsForChart?.data),
+    [txnsForChart?.data]
+  );
+  const pieData = useMemo(
+    () => [
+      { name: "Deposit (cash-in)", value: byType.deposit },
+      { name: "Withdraw (cash-out)", value: byType.withdraw },
+      { name: "Send", value: byType.send },
+    ],
+    [byType]
+  );
+
+  // ===== Mutations: cash-in/out =====
   const [cashIn, { isLoading: cashInLoading }] = useCashInMutation();
   const [cashOut, { isLoading: cashOutLoading }] = useCashOutMutation();
   const [lookupTrigger] = useLazyLookupUserQuery();
 
+  // Forms state
+  const [recipient, setRecipient] = useState(""); // username/email/phone accepted
+  const [amountIn, setAmountIn] = useState<number | "">("");
+  const [amountOut, setAmountOut] = useState<number | "">("");
+
   const handleCash = async (mode: "in" | "out") => {
     try {
       if (!recipient.trim()) return toast.error("Enter a username/email/phone");
-      const user = await lookupTrigger({ q: recipient.trim() }).unwrap();
-      if (!user?.username) return toast.error("User not found");
       const amt = mode === "in" ? Number(amountIn) : Number(amountOut);
       if (!amt || amt <= 0) return toast.error("Enter a valid amount");
+
+      // Lookup user (backend cash-in/out needs username)
+      const user = await lookupTrigger({ q: recipient.trim() }).unwrap();
+      if (!user?.username) return toast.error("User not found");
 
       if (mode === "in") {
         await cashIn({ username: user.username, amount: amt }).unwrap();
@@ -49,16 +86,34 @@ export default function DashboardAgent() {
         toast.success("Cash-out successful");
         setAmountOut("");
       }
+
       setRecipient("");
-      refetch();
+      refetchTxns();
     } catch (e: any) {
       toast.error(e?.data?.message || "Operation failed");
     }
   };
 
+  // ===== Local quick search input for current page (for tour + UX) =====
+  const [q, setQ] = useState("");
+  const filteredRows = useMemo(() => {
+    const rows = txns?.data || [];
+    const qq = q.trim().toLowerCase();
+    if (!qq) return rows;
+    return rows.filter((t) => {
+      const sender = String(t.sender?.username || "").toLowerCase();
+      const receiver = String(t.receiver?.username || "").toLowerCase();
+      return (
+        sender.includes(qq) ||
+        receiver.includes(qq) ||
+        String(t.type).toLowerCase().includes(qq)
+      );
+    });
+  }, [txns?.data, q]);
+
   return (
     <div className="container mx-auto px-3 py-6 space-y-6">
-      {/* Quick actions */}
+      {/* ===== Quick actions ===== */}
       <div id="stats-cards" className="grid gap-4 md:grid-cols-2">
         <div className="card bg-base-100 shadow">
           <div className="card-body space-y-3">
@@ -75,7 +130,9 @@ export default function DashboardAgent() {
               type="number"
               min={0}
               value={amountIn}
-              onChange={(e) => setAmountIn(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) =>
+                setAmountIn(e.target.value === "" ? "" : Number(e.target.value))
+              }
             />
             <button
               onClick={() => handleCash("in")}
@@ -102,7 +159,11 @@ export default function DashboardAgent() {
               type="number"
               min={0}
               value={amountOut}
-              onChange={(e) => setAmountOut(e.target.value === "" ? "" : Number(e.target.value))}
+              onChange={(e) =>
+                setAmountOut(
+                  e.target.value === "" ? "" : Number(e.target.value)
+                )
+              }
             />
             <button
               onClick={() => handleCash("out")}
@@ -115,14 +176,43 @@ export default function DashboardAgent() {
         </div>
       </div>
 
-      {/* Activity table */}
+      {/* ===== Charts ===== */}
       <div id="chart-area" className="card bg-base-100 shadow">
         <div className="card-body">
-          <h3 className="card-title">Handled Transactions</h3>
+          <h3 className="card-title">Agent Activity (Last 30 days)</h3>
+          {chartLoading ? (
+            <div className="skeleton h-64 w-full" />
+          ) : (
+            <>
+              <AreaVolumeChart data={daily} />
+              <div className="divider" />
+              <PieTypeChart data={pieData} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ===== Handled transactions (history) ===== */}
+      <div className="card bg-base-100 shadow">
+        <div className="card-body">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="card-title">Handled Transactions</h3>
+            <input
+              id="table-search" // tour anchor
+              className="input input-bordered"
+              placeholder="Quick search (sender/receiver/type)"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
+          </div>
 
           {/* Filters */}
-          <div className="grid md:grid-cols-4 gap-3 mb-4">
-            <select className="select select-bordered" value={type} onChange={(e) => setType(e.target.value as any)}>
+          <div className="grid md:grid-cols-5 gap-3 mb-4">
+            <select
+              className="select select-bordered"
+              value={type}
+              onChange={(e) => setType(e.target.value as any)}
+            >
               <option value="">All Types</option>
               <option value="deposit">Deposit (cash-in)</option>
               <option value="withdraw">Withdraw (cash-out)</option>
@@ -140,7 +230,21 @@ export default function DashboardAgent() {
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
-            <button className="btn" onClick={() => setPage(1)}>Apply</button>
+            <button className="btn" onClick={() => setPage(1)}>
+              Apply
+            </button>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setType("");
+                setDateFrom("");
+                setDateTo("");
+                setQ("");
+                setPage(1);
+              }}
+            >
+              Reset
+            </button>
           </div>
 
           {txLoading ? (
@@ -164,14 +268,18 @@ export default function DashboardAgent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {txns?.data?.map((t) => (
+                    {(filteredRows || []).map((t) => (
                       <tr key={t._id}>
                         <td className="capitalize">{t.type}</td>
-                        <td>${t.amount.toFixed(2)}</td>
+                        <td>${Number(t.amount).toFixed(2)}</td>
                         <td>{t.sender?.username || "-"}</td>
                         <td>{t.receiver?.username || "-"}</td>
                         <td className="capitalize">{t.status}</td>
-                        <td>{t.createdAt ? new Date(t.createdAt).toLocaleString() : "-"}</td>
+                        <td>
+                          {t.createdAt
+                            ? new Date(t.createdAt).toLocaleString()
+                            : "-"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
