@@ -10,6 +10,7 @@ export interface UserSafe {
   createdAt?: string;
   updatedAt?: string;
 }
+
 export interface UpdateProfileReq {
   username?: string;
   email?: string;
@@ -22,22 +23,30 @@ export interface UpdatePasswordReq {
 
 export const profileApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
-    updateMyProfile: builder.mutation<{ message: string; user: UserSafe }, UpdateProfileReq>({
+    // NEW
+    getMyProfile: builder.query<UserSafe, void>({
+      query: () => ({ url: "/users/me" }),
+      providesTags: ["Me"],
+    }),
+    updateMyProfile: builder.mutation<
+      { message: string; user: UserSafe },
+      UpdateProfileReq
+    >({
       query: (body) => ({ url: "/users/me", method: "PATCH", body }),
       invalidatesTags: ["Me"],
     }),
     updateMyPassword: builder.mutation<{ message: string }, UpdatePasswordReq>({
       query: (body) => ({ url: "/users/me/password", method: "PATCH", body }),
     }),
-    lookupUser: builder.query<UserSafe, { username?: string; email?: string; phone?: string; q?: string }>(
-      {
-        query: (params) => ({ url: "/users/lookup", params }),
-      }
-    ),
+    lookupUser: builder.query<
+      UserSafe,
+      { username?: string; email?: string; phone?: string; q?: string }
+    >({ query: (params) => ({ url: "/users/lookup", params }) }),
   }),
 });
 
 export const {
+  useGetMyProfileQuery,
   useUpdateMyProfileMutation,
   useUpdateMyPasswordMutation,
   useLazyLookupUserQuery,
