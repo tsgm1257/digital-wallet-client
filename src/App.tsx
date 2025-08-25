@@ -1,6 +1,10 @@
 import { BrowserRouter, Routes, Route } from "react-router";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import About from "./pages/About";
+import Features from "./pages/Features";
+import FAQ from "./pages/FAQ";
+import Contact from "./pages/Contact";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -21,29 +25,33 @@ export default function App() {
       <Toaster position="top-right" />
       <Navbar />
       <Routes>
+        {/* Public Landing */}
         <Route path="/" element={<Landing />} />
-        <Route path="/features" element={<Placeholder title="Features" />} />
-        <Route path="/faq" element={<Placeholder title="FAQ" />} />
+        <Route path="/about" element={<About />} />
+        <Route path="/features" element={<Features />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/contact" element={<Contact />} />
+
+        {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
+        {/* Protected (unchanged) */}
         <Route element={<Protected roles={["user"]} />}>
           <Route path="/dashboard/user" element={<DashboardUser />} />
         </Route>
-
         <Route element={<Protected roles={["agent"]} />}>
           <Route path="/dashboard/agent" element={<DashboardAgent />} />
         </Route>
-
         <Route element={<Protected roles={["admin"]} />}>
           <Route path="/dashboard/admin" element={<DashboardAdmin />} />
         </Route>
-
         <Route element={<Protected />}>
           <Route path="/settings" element={<Settings />} />
         </Route>
 
-        <Route path="*" element={<Placeholder title="Not Found" />} />
+        {/* Fallback */}
+        <Route path="*" element={<div className="container mx-auto px-3 py-10">Not Found</div>} />
       </Routes>
       <Footer />
     </BrowserRouter>

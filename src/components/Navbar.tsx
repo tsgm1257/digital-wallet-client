@@ -39,7 +39,13 @@ export default function Navbar() {
               <Link to="/features">Features</Link>
             </li>
             <li>
+              <Link to="/about">About</Link>
+            </li>
+            <li>
               <Link to="/faq">FAQ</Link>
+            </li>
+            <li>
+              <Link to="/contact">Contact</Link>
             </li>
             {isLoggedIn && (
               <li>
