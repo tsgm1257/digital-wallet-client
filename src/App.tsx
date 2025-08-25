@@ -5,6 +5,8 @@ import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import DashboardUser from "./pages/DashboardUser";
+import DashboardAgent from "./pages/DashboardAgent";
+import DashboardAdmin from "./pages/DashboardAdmin";
 import Protected from "./routes/Protected";
 import { Toaster } from "react-hot-toast";
 import Settings from "./pages/Settings";
@@ -30,17 +32,11 @@ export default function App() {
         </Route>
 
         <Route element={<Protected roles={["agent"]} />}>
-          <Route
-            path="/dashboard/agent"
-            element={<Placeholder title="Agent Dashboard" />}
-          />
+          <Route path="/dashboard/agent" element={<DashboardAgent />} />
         </Route>
 
         <Route element={<Protected roles={["admin"]} />}>
-          <Route
-            path="/dashboard/admin"
-            element={<Placeholder title="Admin Dashboard" />}
-          />
+          <Route path="/dashboard/admin" element={<DashboardAdmin />} />
         </Route>
 
         <Route element={<Protected />}>
