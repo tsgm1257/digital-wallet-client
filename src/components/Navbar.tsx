@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router"; // per your preference
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router";
 import { useDispatch } from "react-redux";
-import { FiSun, FiMoon, FiUser } from "react-icons/fi";
+import { FiSun, FiMoon, FiUser, FiSettings } from "react-icons/fi";
 import { logout } from "../app/store";
 import { useAuth } from "../hooks/useAuth";
 
@@ -27,7 +27,6 @@ const ThemeToggleDesktop = () => {
         onChange={(e) => setIsDark(e.target.checked)}
         aria-label="Toggle theme"
       />
-      {/* sun / moon icons */}
       <FiSun className="swap-off h-6 w-6" />
       <FiMoon className="swap-on h-6 w-6" />
     </label>
@@ -50,6 +49,7 @@ const ThemeToggleMobileButton = () => {
     <button
       className="btn btn-outline btn-sm mx-auto"
       onClick={() => setIsDark((v) => !v)}
+      aria-label="Toggle theme"
     >
       {isDark ? "Light" : "Dark"}
     </button>
@@ -76,21 +76,34 @@ const DesktopLinks = () => (
   </ul>
 );
 
-const AvatarWithTooltip = ({
+/** Avatar that aligns the React Icon perfectly inside a circle */
+const AlignedAvatar = ({
   name,
   photoURL,
+  size = 36, // px
 }: {
   name?: string;
   photoURL?: string | null;
+  size?: number;
 }) => {
+  const px = `${size}px`;
   return (
     <div className="tooltip tooltip-bottom" data-tip={name || "User"}>
-      <div className="avatar placeholder">
-        <div className="bg-primary text-primary-content w-9 rounded-full flex items-center justify-center">
+      <div className="avatar" style={{ width: px, height: px }}>
+        <div
+          className="rounded-full ring ring-base-300 ring-offset-2 overflow-hidden bg-base-200"
+          style={{ width: px, height: px }}
+        >
           {photoURL ? (
-            <img src={photoURL} alt={name || "User"} />
+            <img
+              src={photoURL}
+              alt={name || "User"}
+              className="w-full h-full object-cover"
+            />
           ) : (
-            <FiUser className="text-lg" />
+            <div className="w-full h-full inline-flex items-center justify-center leading-none">
+              <FiUser className="w-5 h-5 md:w-6 md:h-6 text-base-content/70" />
+            </div>
           )}
         </div>
       </div>
@@ -151,6 +164,13 @@ const Navbar = () => {
     };
   }, [open]);
 
+  const dashboardPath =
+    role === "admin"
+      ? "/dashboard/admin"
+      : role === "agent"
+      ? "/dashboard/agent"
+      : "/dashboard/user";
+
   return (
     <header className="sticky top-0 z-50 border-b bg-base-100/80 backdrop-blur">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -173,20 +193,26 @@ const Navbar = () => {
           {/* RIGHT (desktop) */}
           <div className="hidden lg:flex lg:basis-1/3 lg:justify-end lg:items-center lg:gap-3">
             <ThemeToggleDesktop />
+
             {isLoggedIn && (
-              <Link
-                to={
-                  role === "admin"
-                    ? "/dashboard/admin"
-                    : role === "agent"
-                    ? "/dashboard/agent"
-                    : "/dashboard/user"
-                }
-                className="btn btn-outline"
-              >
-                Dashboard
-              </Link>
+              <>
+                <Link to={dashboardPath} className="btn btn-outline">
+                  Dashboard
+                </Link>
+
+                {/* Settings as icon-only */}
+                <div className="tooltip tooltip-bottom" data-tip="Settings">
+                  <Link
+                    to="/settings"
+                    className="btn btn-ghost btn-square"
+                    aria-label="Settings"
+                  >
+                    <FiSettings className="w-5 h-5" />
+                  </Link>
+                </div>
+              </>
             )}
+
             {!isLoggedIn ? (
               <>
                 <Link to="/login" className="btn btn-ghost">
@@ -198,7 +224,7 @@ const Navbar = () => {
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <AvatarWithTooltip name={displayName} photoURL={photoURL} />
+                <AlignedAvatar name={displayName} photoURL={photoURL} />
                 <button onClick={handleLogout} className="btn btn-ghost">
                   Logout
                 </button>
@@ -213,6 +239,7 @@ const Navbar = () => {
               aria-label="Toggle menu"
               onClick={() => setOpen((v) => !v)}
             >
+              {/* Hamburger icon */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-6 w-6"
@@ -275,17 +302,19 @@ const Navbar = () => {
                 ) : (
                   <>
                     <Link
-                      to={
-                        role === "admin"
-                          ? "/dashboard/admin"
-                          : role === "agent"
-                          ? "/dashboard/agent"
-                          : "/dashboard/user"
-                      }
+                      to={dashboardPath}
                       onClick={() => setOpen(false)}
                       className="btn btn-outline w-full"
                     >
                       Dashboard
+                    </Link>
+                    {/* Keep text in mobile menu for clarity; say the word if you want icon-only here too */}
+                    <Link
+                      to="/settings"
+                      onClick={() => setOpen(false)}
+                      className="btn btn-ghost w-full"
+                    >
+                      Settings
                     </Link>
                     <span className="opacity-70">
                       Hello, {displayName || "User"}

@@ -15,20 +15,58 @@ import PieTypeChart from "../components/charts/PieTypeChart";
 import { buildDailySeries, daysAgoISO, sumByType } from "../utils/txAgg";
 import Pagination from "../components/Pagination";
 
+/* ------------------------------ Types ---------------------------------- */
+interface Wallet {
+  balance?: number;
+}
+
+interface UserLite {
+  username?: string;
+}
+
+interface TxRow {
+  _id: string;
+  type: TxType; // "send" | "withdraw" | "deposit"
+  amount: number;
+  sender?: UserLite;
+  receiver?: UserLite;
+  status: "completed" | "failed" | string;
+  createdAt?: string;
+}
+
+interface Paged<T> {
+  data: T[];
+  total: number;
+}
+
+type NumOrEmpty = number | "";
+
+/* --------------------------- Utilities --------------------------------- */
+const toNumberOr = (v: NumOrEmpty, fallback = 0): number =>
+  typeof v === "number" ? v : fallback;
+
+const getErrorMessage = (err: unknown): string => {
+  const apiMsg =
+    (err as { data?: { message?: string } })?.data?.message ??
+    (err as { message?: string })?.message;
+  return apiMsg || "Operation failed";
+};
+
+/* ---------------------------- Component -------------------------------- */
 export default function DashboardUser() {
   // ===== Queries =====
   const {
     data: wallet,
     isLoading: walletLoading,
     refetch: refetchWallet,
-  } = useGetMyWalletQuery();
+  } = useGetMyWalletQuery(undefined, { refetchOnMountOrArgChange: true });
 
   // Table filters
-  const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [page, setPage] = useState<number>(1);
+  const [limit] = useState<number>(10);
   const [type, setType] = useState<"" | TxType>("");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   const {
     data: txns,
@@ -51,18 +89,21 @@ export default function DashboardUser() {
     });
 
   const daily = useMemo(
-    () => buildDailySeries(txnsForChart?.data, 30),
-    [txnsForChart?.data]
+    () =>
+      buildDailySeries((txnsForChart as Paged<TxRow> | undefined)?.data, 30),
+    [txnsForChart]
   );
+
   const byType = useMemo(
-    () => sumByType(txnsForChart?.data),
-    [txnsForChart?.data]
+    () => sumByType((txnsForChart as Paged<TxRow> | undefined)?.data),
+    [txnsForChart]
   );
+
   const pieData = useMemo(
     () => [
-      { name: "Deposit", value: byType.deposit },
-      { name: "Withdraw", value: byType.withdraw },
-      { name: "Send", value: byType.send },
+      { name: "Deposit", value: byType.deposit ?? 0 },
+      { name: "Withdraw", value: byType.withdraw ?? 0 },
+      { name: "Send", value: byType.send ?? 0 },
     ],
     [byType]
   );
@@ -74,15 +115,15 @@ export default function DashboardUser() {
     useWithdrawMoneyMutation();
 
   // Forms state
-  const [recipient, setRecipient] = useState("");
-  const [sendAmount, setSendAmount] = useState<number | "">("");
-  const [addAmount, setAddAmount] = useState<number | "">("");
-  const [withdrawAmount, setWithdrawAmount] = useState<number | "">("");
+  const [recipient, setRecipient] = useState<string>("");
+  const [sendAmount, setSendAmount] = useState<NumOrEmpty>("");
+  const [addAmount, setAddAmount] = useState<NumOrEmpty>("");
+  const [withdrawAmount, setWithdrawAmount] = useState<NumOrEmpty>("");
 
   const onSend = async () => {
     try {
       if (!recipient.trim()) return toast.error("Enter username/email/phone");
-      const amt = Number(sendAmount);
+      const amt = toNumberOr(sendAmount);
       if (!amt || amt <= 0) return toast.error("Enter a valid amount");
       await sendMoney({ recipient: recipient.trim(), amount: amt }).unwrap();
       toast.success("Money sent");
@@ -90,43 +131,43 @@ export default function DashboardUser() {
       setSendAmount("");
       refetchWallet();
       refetchTxns();
-    } catch (e: any) {
-      toast.error(e?.data?.message || "Send failed");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
   const onAdd = async () => {
     try {
-      const amt = Number(addAmount);
+      const amt = toNumberOr(addAmount);
       if (!amt || amt <= 0) return toast.error("Enter a valid amount");
       await addMoney({ amount: amt }).unwrap();
       toast.success("Deposited");
       setAddAmount("");
       refetchWallet();
       refetchTxns();
-    } catch (e: any) {
-      toast.error(e?.data?.message || "Deposit failed");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
   const onWithdraw = async () => {
     try {
-      const amt = Number(withdrawAmount);
+      const amt = toNumberOr(withdrawAmount);
       if (!amt || amt <= 0) return toast.error("Enter a valid amount");
       await withdrawMoney({ amount: amt }).unwrap();
       toast.success("Withdrawn");
       setWithdrawAmount("");
       refetchWallet();
       refetchTxns();
-    } catch (e: any) {
-      toast.error(e?.data?.message || "Withdraw failed");
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
-  // Local quick filter for current page (for demo/tour). It filters only the loaded page.
-  const [q, setQ] = useState("");
+  // Local quick filter for current page (filters only the loaded page)
+  const [q, setQ] = useState<string>("");
   const filteredRows = useMemo(() => {
-    const rows = txns?.data || [];
+    const rows = (txns as Paged<TxRow> | undefined)?.data ?? [];
     const qq = q.trim().toLowerCase();
     if (!qq) return rows;
     return rows.filter((t) => {
@@ -138,36 +179,48 @@ export default function DashboardUser() {
         String(t.type).toLowerCase().includes(qq)
       );
     });
-  }, [txns?.data, q]);
+  }, [txns, q]);
+
+  const totalTx = (txns as Paged<TxRow> | undefined)?.total ?? 0;
 
   return (
     <div className="container mx-auto px-3 py-6 space-y-6">
-      {/* ===== Stats cards ===== */}
-      <div id="stats-cards" className="grid gap-4 md:grid-cols-3">
-        <div className="card bg-base-100 shadow">
+      {/* ===== Stats & Quick Actions ===== */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Balance */}
+        <section
+          data-tour="balance-card"
+          className="card bg-base-100 shadow border border-base-200"
+        >
           <div className="card-body">
             <h3 className="card-title">Wallet Balance</h3>
             {walletLoading ? (
               <div className="skeleton h-8 w-32" />
             ) : (
               <p className="text-3xl font-bold">
-                ${wallet?.balance?.toFixed(2) ?? "0.00"}
+                ${((wallet as Wallet | undefined)?.balance ?? 0).toFixed(2)}
               </p>
             )}
             <span className="text-sm opacity-70">
               Current available balance
             </span>
           </div>
-        </div>
+        </section>
 
-        <div className="card bg-base-100 shadow">
+        {/* Quick Send */}
+        <section
+          data-tour="send-money-form"
+          className="card bg-base-100 shadow border border-base-200"
+        >
           <div className="card-body space-y-3">
             <h3 className="card-title">Quick Send</h3>
             <input
               className="input input-bordered w-full"
               placeholder="Recipient (username / email / phone)"
               value={recipient}
-              onChange={(e) => setRecipient(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setRecipient(e.target.value)
+              }
             />
             <input
               className="input input-bordered w-full"
@@ -175,7 +228,7 @@ export default function DashboardUser() {
               type="number"
               min={0}
               value={sendAmount}
-              onChange={(e) =>
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                 setSendAmount(
                   e.target.value === "" ? "" : Number(e.target.value)
                 )
@@ -189,9 +242,13 @@ export default function DashboardUser() {
               {sending ? "Sending..." : "Send Money"}
             </button>
           </div>
-        </div>
+        </section>
 
-        <div className="card bg-base-100 shadow">
+        {/* Deposit / Withdraw */}
+        <section
+          data-tour="add-money-form"
+          className="card bg-base-100 shadow border border-base-200"
+        >
           <div className="card-body space-y-3">
             <h3 className="card-title">Deposit / Withdraw</h3>
             <div className="flex gap-2">
@@ -201,7 +258,7 @@ export default function DashboardUser() {
                 type="number"
                 min={0}
                 value={addAmount}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setAddAmount(
                     e.target.value === "" ? "" : Number(e.target.value)
                   )
@@ -222,7 +279,7 @@ export default function DashboardUser() {
                 type="number"
                 min={0}
                 value={withdrawAmount}
-                onChange={(e) =>
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   setWithdrawAmount(
                     e.target.value === "" ? "" : Number(e.target.value)
                   )
@@ -239,11 +296,15 @@ export default function DashboardUser() {
               </button>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
       {/* ===== Charts ===== */}
-      <div id="chart-area" className="card bg-base-100 shadow">
+      <section
+        id="chart-area"
+        data-tour="charts"
+        className="card bg-base-100 shadow"
+      >
         <div className="card-body">
           <h3 className="card-title">Activity (Last 30 days)</h3>
           {chartLoading ? (
@@ -256,19 +317,21 @@ export default function DashboardUser() {
             </>
           )}
         </div>
-      </div>
+      </section>
 
       {/* ===== Transaction history ===== */}
-      <div className="card bg-base-100 shadow">
+      <section data-tour="recent-tx-table" className="card bg-base-100 shadow">
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
             <h3 className="card-title">Recent Transactions</h3>
             <input
-              id="table-search" // tour anchor
+              id="table-search" // tour anchor if you want to mention quick search
               className="input input-bordered"
               placeholder="Quick search (sender/receiver/type)"
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setQ(e.target.value)
+              }
             />
           </div>
 
@@ -277,7 +340,9 @@ export default function DashboardUser() {
             <select
               className="select select-bordered"
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                setType(e.target.value as "" | TxType)
+              }
             >
               <option value="">All Types</option>
               <option value="deposit">Deposit</option>
@@ -288,13 +353,17 @@ export default function DashboardUser() {
               type="date"
               className="input input-bordered"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setDateFrom(e.target.value)
+              }
             />
             <input
               type="date"
               className="input input-bordered"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                setDateTo(e.target.value)
+              }
             />
             <button className="btn" onClick={() => setPage(1)}>
               Apply
@@ -334,7 +403,7 @@ export default function DashboardUser() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(filteredRows || []).map((t) => (
+                    {(filteredRows as TxRow[]).map((t) => (
                       <tr key={t._id}>
                         <td className="capitalize">{t.type}</td>
                         <td>${Number(t.amount).toFixed(2)}</td>
@@ -355,13 +424,13 @@ export default function DashboardUser() {
               <Pagination
                 page={page}
                 limit={limit}
-                total={txns?.total || 0}
-                onPage={(p) => setPage(p)}
+                total={totalTx}
+                onPage={(p: number) => setPage(p)}
               />
             </>
           )}
         </div>
-      </div>
+      </section>
     </div>
   );
 }

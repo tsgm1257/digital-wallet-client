@@ -13,8 +13,61 @@ import AreaVolumeChart from "../components/charts/AreaVolumeChart";
 import PieTypeChart from "../components/charts/PieTypeChart";
 import { buildDailySeries, daysAgoISO } from "../utils/txAgg";
 
+/* ------------------------------ Types ---------------------------------- */
+type Role = "user" | "agent" | "admin";
+type BoolStr = "" | "true" | "false";
 type TabKey = "users" | "wallets" | "transactions";
 
+interface AdminStats {
+  users: {
+    totalUsers: number;
+    totalAgents: number;
+    approvedAgents: number;
+    pendingAgents: number;
+  };
+  transactions: {
+    total: number;
+    totalVolume: number;
+    byType?: Partial<Record<"deposit" | "withdraw" | "send", number>>;
+    byStatus?: Partial<Record<"completed" | "failed", number>>;
+  };
+}
+
+interface UserRow {
+  _id: string;
+  username: string;
+  email?: string;
+  phone?: string;
+  role: Role;
+  isApproved?: boolean;
+}
+
+interface WalletRow {
+  _id: string;
+  user?: UserRow;
+  balance: number;
+  isBlocked: boolean;
+}
+
+interface TxRow {
+  _id: string;
+  type: "send" | "withdraw" | "deposit";
+  amount: number;
+  sender?: UserRow;
+  receiver?: UserRow;
+  status: "completed" | "failed" | string;
+  createdAt?: string;
+}
+
+/* -------------------------- Helpers ------------------------------------ */
+const getErrorMessage = (err: unknown): string => {
+  const apiMsg =
+    (err as { data?: { message?: string } })?.data?.message ??
+    (err as { message?: string })?.message;
+  return apiMsg || "Operation failed";
+};
+
+/* -------------------------- Component ---------------------------------- */
 export default function DashboardAdmin() {
   const [tab, setTab] = useState<TabKey>("users");
 
@@ -23,14 +76,14 @@ export default function DashboardAdmin() {
     data: stats,
     isLoading: statsLoading,
     refetch: refetchStats,
-  } = useGetAdminStatsQuery();
+  } = useGetAdminStatsQuery(undefined, { refetchOnMountOrArgChange: true });
 
   // ===== USERS tab state & query =====
-  const [uPage, setUPage] = useState(1);
-  const [uLimit] = useState(10);
-  const [uRole, setURole] = useState<"" | "user" | "agent" | "admin">("");
-  const [uApproved, setUApproved] = useState<"" | "true" | "false">("");
-  const [uSearch, setUSearch] = useState("");
+  const [uPage, setUPage] = useState<number>(1);
+  const [uLimit] = useState<number>(10);
+  const [uRole, setURole] = useState<"" | Role>("");
+  const [uApproved, setUApproved] = useState<BoolStr>("");
+  const [uSearch, setUSearch] = useState<string>("");
 
   const usersQuery = useGetUsersQuery({
     page: uPage,
@@ -41,14 +94,14 @@ export default function DashboardAdmin() {
   });
 
   // ===== WALLETS tab state & query =====
-  const [wPage, setWPage] = useState(1);
-  const [wLimit] = useState(10);
-  const [wBlocked, setWBlocked] = useState<"" | "true" | "false">("");
-  const [wRole, setWRole] = useState<"" | "user" | "agent" | "admin">("");
-  const [wApproved, setWApproved] = useState<"" | "true" | "false">("");
-  const [wMin, setWMin] = useState("");
-  const [wMax, setWMax] = useState("");
-  const [wSearch, setWSearch] = useState("");
+  const [wPage, setWPage] = useState<number>(1);
+  const [wLimit] = useState<number>(10);
+  const [wBlocked, setWBlocked] = useState<BoolStr>("");
+  const [wRole, setWRole] = useState<"" | Role>("");
+  const [wApproved, setWApproved] = useState<BoolStr>("");
+  const [wMin, setWMin] = useState<string>("");
+  const [wMax, setWMax] = useState<string>("");
+  const [wSearch, setWSearch] = useState<string>("");
 
   const walletsQuery = useGetWalletsQuery({
     page: wPage,
@@ -62,15 +115,15 @@ export default function DashboardAdmin() {
   });
 
   // ===== TRANSACTIONS tab state & query =====
-  const [tPage, setTPage] = useState(1);
-  const [tLimit] = useState(10);
-  const [tType, setTType] = useState<"" | "send" | "withdraw" | "deposit">("");
+  const [tPage, setTPage] = useState<number>(1);
+  const [tLimit] = useState<number>(10);
+  const [tType, setTType] = useState<"" | TxRow["type"]>("");
   const [tStatus, setTStatus] = useState<"" | "completed" | "failed">("");
-  const [tFrom, setTFrom] = useState("");
-  const [tTo, setTTo] = useState("");
-  const [tUserId, setTUserId] = useState("");
-  const [tMin, setTMin] = useState("");
-  const [tMax, setTMax] = useState("");
+  const [tFrom, setTFrom] = useState<string>("");
+  const [tTo, setTTo] = useState<string>("");
+  const [tUserId, setTUserId] = useState<string>("");
+  const [tMin, setTMin] = useState<string>("");
+  const [tMax, setTMax] = useState<string>("");
 
   const txQuery = useGetAllTransactionsAdminQuery({
     page: tPage,
@@ -102,28 +155,28 @@ export default function DashboardAdmin() {
     dateFrom: daysAgoISO(30),
   });
   const dailySeries = useMemo(
-    () => buildDailySeries(txChartQuery.data?.data, 30),
+    () => buildDailySeries(txChartQuery.data?.data as TxRow[] | undefined, 30),
     [txChartQuery.data?.data]
   );
 
   const pieTypeData = useMemo(() => {
-    const t = stats?.transactions?.byType || {};
+    const t = (stats as AdminStats | undefined)?.transactions?.byType ?? {};
     return [
-      { name: "Deposit", value: t.deposit || 0 },
-      { name: "Withdraw", value: t.withdraw || 0 },
-      { name: "Send", value: t.send || 0 },
+      { name: "Deposit", value: t.deposit ?? 0 },
+      { name: "Withdraw", value: t.withdraw ?? 0 },
+      { name: "Send", value: t.send ?? 0 },
     ];
   }, [stats]);
 
   const pieStatusData = useMemo(() => {
-    const s = stats?.transactions?.byStatus || {};
+    const s = (stats as AdminStats | undefined)?.transactions?.byStatus ?? {};
     return [
-      { name: "Completed", value: s.completed || 0 },
-      { name: "Failed", value: s.failed || 0 },
+      { name: "Completed", value: s.completed ?? 0 },
+      { name: "Failed", value: s.failed ?? 0 },
     ];
   }, [stats]);
 
-  // keep tab when switching (optional)
+  // keep tab when switching
   useEffect(() => {
     const saved = sessionStorage.getItem("admin_tab");
     if (saved === "users" || saved === "wallets" || saved === "transactions") {
@@ -134,10 +187,24 @@ export default function DashboardAdmin() {
     sessionStorage.setItem("admin_tab", tab);
   }, [tab]);
 
+  // Typed snapshots for mapping
+  const users: UserRow[] = (usersQuery.data?.data ?? []) as UserRow[];
+  const usersTotal = usersQuery.data?.total ?? 0;
+
+  const wallets: WalletRow[] = (walletsQuery.data?.data ?? []) as WalletRow[];
+  const walletsTotal = walletsQuery.data?.total ?? 0;
+
+  const txs: TxRow[] = (txQuery.data?.data ?? []) as TxRow[];
+  const txTotal = txQuery.data?.total ?? 0;
+
   return (
     <div className="container mx-auto px-3 py-6 space-y-6">
       {/* ===== KPI Cards ===== */}
-      <div id="stats-cards" className="grid gap-4 md:grid-cols-3">
+      <div
+        id="stats-cards"
+        data-tour="balance-card-admin"
+        className="grid gap-4 md:grid-cols-3"
+      >
         <div className="card bg-base-100 shadow">
           <div className="card-body">
             <h3 className="card-title">Users</h3>
@@ -145,7 +212,7 @@ export default function DashboardAdmin() {
               <div className="skeleton h-8 w-24" />
             ) : (
               <p className="text-3xl font-bold">
-                {stats?.users.totalUsers ?? 0}
+                {(stats as AdminStats | undefined)?.users.totalUsers ?? 0}
               </p>
             )}
             <span className="text-sm opacity-70">Total Users</span>
@@ -158,12 +225,14 @@ export default function DashboardAdmin() {
               <div className="skeleton h-8 w-24" />
             ) : (
               <p className="text-3xl font-bold">
-                {stats?.users.totalAgents ?? 0}
+                {(stats as AdminStats | undefined)?.users.totalAgents ?? 0}
               </p>
             )}
             <span className="text-sm opacity-70">
-              Approved {stats?.users.approvedAgents ?? 0} / Pending{" "}
-              {stats?.users.pendingAgents ?? 0}
+              Approved{" "}
+              {(stats as AdminStats | undefined)?.users.approvedAgents ?? 0} /
+              Pending{" "}
+              {(stats as AdminStats | undefined)?.users.pendingAgents ?? 0}
             </span>
           </div>
         </div>
@@ -174,18 +243,28 @@ export default function DashboardAdmin() {
               <div className="skeleton h-8 w-24" />
             ) : (
               <p className="text-3xl font-bold">
-                ${stats?.transactions.totalVolume?.toFixed?.(2) ?? "0.00"}
+                $
+                {(
+                  (stats as AdminStats | undefined)?.transactions.totalVolume ??
+                  0
+                ).toFixed(2)}
               </p>
             )}
             <span className="text-sm opacity-70">
-              Across {stats?.transactions.total ?? 0} transactions
+              Across{" "}
+              {(stats as AdminStats | undefined)?.transactions.total ?? 0}{" "}
+              transactions
             </span>
           </div>
         </div>
       </div>
 
       {/* ===== Charts ===== */}
-      <section id="chart-area" className="card bg-base-100 shadow">
+      <section
+        id="chart-area"
+        data-tour="charts-admin"
+        className="card bg-base-100 shadow"
+      >
         <div className="card-body">
           <h3 className="card-title">Transactions Overview (Last 30 days)</h3>
           {txChartQuery.isLoading ? (
@@ -247,11 +326,23 @@ export default function DashboardAdmin() {
           <div className="card-body">
             <h3 className="card-title">Users</h3>
 
+            {/* Small helper anchor for the tour to talk about approvals */}
+            <div
+              data-tour="approve-agents-table"
+              className="alert alert-info mb-3"
+              role="note"
+            >
+              Agent approvals happen here. Filter Role = <b>Agent</b>, then use
+              Approve/Suspend in the Actions column.
+            </div>
+
             <div className="grid md:grid-cols-5 gap-3 mb-4">
               <select
                 className="select select-bordered"
                 value={uRole}
-                onChange={(e) => setURole(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setURole(e.target.value as "" | Role)
+                }
               >
                 <option value="">All Roles</option>
                 <option value="user">User</option>
@@ -261,18 +352,22 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={uApproved}
-                onChange={(e) => setUApproved(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setUApproved(e.target.value as BoolStr)
+                }
               >
                 <option value="">Approval (any)</option>
                 <option value="true">Approved</option>
                 <option value="false">Pending/Suspended</option>
               </select>
               <input
-                id="table-search" // tour anchor
+                id="table-search" // tour anchor (if needed)
                 className="input input-bordered"
                 placeholder="Search username/email/phone"
                 value={uSearch}
-                onChange={(e) => setUSearch(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setUSearch(e.target.value)
+                }
               />
               <button className="btn" onClick={() => setUPage(1)}>
                 Apply
@@ -294,7 +389,7 @@ export default function DashboardAdmin() {
               <div className="skeleton h-6 w-full" />
             ) : (
               <>
-                <div className="overflow-x-auto">
+                <div data-tour="manage-users-table" className="overflow-x-auto">
                   <table className="table">
                     <thead>
                       <tr>
@@ -307,7 +402,7 @@ export default function DashboardAdmin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {usersQuery.data?.data?.map((u) => (
+                      {users.map((u) => (
                         <tr key={u._id}>
                           <td>{u.username}</td>
                           <td>{u.email || "-"}</td>
@@ -333,8 +428,8 @@ export default function DashboardAdmin() {
                                       }).unwrap();
                                       toast.success("Agent approved");
                                       refreshAll();
-                                    } catch (e: any) {
-                                      toast.error(e?.data?.message || "Failed");
+                                    } catch (err: unknown) {
+                                      toast.error(getErrorMessage(err));
                                     }
                                   }}
                                 >
@@ -350,8 +445,8 @@ export default function DashboardAdmin() {
                                       }).unwrap();
                                       toast.success("Agent suspended");
                                       refreshAll();
-                                    } catch (e: any) {
-                                      toast.error(e?.data?.message || "Failed");
+                                    } catch (err: unknown) {
+                                      toast.error(getErrorMessage(err));
                                     }
                                   }}
                                 >
@@ -369,8 +464,8 @@ export default function DashboardAdmin() {
                 <Pagination
                   page={uPage}
                   limit={uLimit}
-                  total={usersQuery.data?.total || 0}
-                  onPage={(p) => setUPage(p)}
+                  total={usersTotal}
+                  onPage={(p: number) => setUPage(p)}
                 />
               </>
             )}
@@ -388,7 +483,9 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={wBlocked}
-                onChange={(e) => setWBlocked(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setWBlocked(e.target.value as BoolStr)
+                }
               >
                 <option value="">Blocked (any)</option>
                 <option value="true">Blocked</option>
@@ -397,7 +494,9 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={wRole}
-                onChange={(e) => setWRole(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setWRole(e.target.value as "" | Role)
+                }
               >
                 <option value="">Role (any)</option>
                 <option value="user">User</option>
@@ -407,7 +506,9 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={wApproved}
-                onChange={(e) => setWApproved(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setWApproved(e.target.value as BoolStr)
+                }
               >
                 <option value="">Approval (any)</option>
                 <option value="true">Approved</option>
@@ -417,19 +518,25 @@ export default function DashboardAdmin() {
                 className="input input-bordered"
                 placeholder="Min $"
                 value={wMin}
-                onChange={(e) => setWMin(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setWMin(e.target.value)
+                }
               />
               <input
                 className="input input-bordered"
                 placeholder="Max $"
                 value={wMax}
-                onChange={(e) => setWMax(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setWMax(e.target.value)
+                }
               />
               <input
                 className="input input-bordered"
                 placeholder="Search username/email/phone"
                 value={wSearch}
-                onChange={(e) => setWSearch(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setWSearch(e.target.value)
+                }
               />
               <div className="flex gap-2">
                 <button className="btn" onClick={() => setWPage(1)}>
@@ -469,7 +576,7 @@ export default function DashboardAdmin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {walletsQuery.data?.data?.map((w) => (
+                      {wallets.map((w) => (
                         <tr key={w._id}>
                           <td>{w.user?.username}</td>
                           <td className="capitalize">{w.user?.role}</td>
@@ -499,8 +606,8 @@ export default function DashboardAdmin() {
                                       : "Wallet blocked"
                                   );
                                   refreshAll();
-                                } catch (e: any) {
-                                  toast.error(e?.data?.message || "Failed");
+                                } catch (err: unknown) {
+                                  toast.error(getErrorMessage(err));
                                 }
                               }}
                             >
@@ -516,8 +623,8 @@ export default function DashboardAdmin() {
                 <Pagination
                   page={wPage}
                   limit={wLimit}
-                  total={walletsQuery.data?.total || 0}
-                  onPage={(p) => setWPage(p)}
+                  total={walletsTotal}
+                  onPage={(p: number) => setWPage(p)}
                 />
               </>
             )}
@@ -535,7 +642,9 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={tType}
-                onChange={(e) => setTType(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setTType(e.target.value as "" | TxRow["type"])
+                }
               >
                 <option value="">Type (any)</option>
                 <option value="send">Send</option>
@@ -545,7 +654,9 @@ export default function DashboardAdmin() {
               <select
                 className="select select-bordered"
                 value={tStatus}
-                onChange={(e) => setTStatus(e.target.value as any)}
+                onChange={(e: React.ChangeEvent<HTMLSelectElement>) =>
+                  setTStatus(e.target.value as "" | "completed" | "failed")
+                }
               >
                 <option value="">Status (any)</option>
                 <option value="completed">Completed</option>
@@ -555,31 +666,41 @@ export default function DashboardAdmin() {
                 type="date"
                 className="input input-bordered"
                 value={tFrom}
-                onChange={(e) => setTFrom(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTFrom(e.target.value)
+                }
               />
               <input
                 type="date"
                 className="input input-bordered"
                 value={tTo}
-                onChange={(e) => setTTo(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTTo(e.target.value)
+                }
               />
               <input
                 className="input input-bordered"
                 placeholder="UserId (optional)"
                 value={tUserId}
-                onChange={(e) => setTUserId(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTUserId(e.target.value)
+                }
               />
               <input
                 className="input input-bordered"
                 placeholder="Min $"
                 value={tMin}
-                onChange={(e) => setTMin(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTMin(e.target.value)
+                }
               />
               <input
                 className="input input-bordered"
                 placeholder="Max $"
                 value={tMax}
-                onChange={(e) => setTMax(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setTMax(e.target.value)
+                }
               />
               <div className="flex gap-2">
                 <button className="btn" onClick={() => setTPage(1)}>
@@ -620,7 +741,7 @@ export default function DashboardAdmin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {txQuery.data?.data?.map((t) => (
+                      {txs.map((t) => (
                         <tr key={t._id}>
                           <td className="capitalize">{t.type}</td>
                           <td>${Number(t.amount).toFixed(2)}</td>
@@ -641,8 +762,8 @@ export default function DashboardAdmin() {
                 <Pagination
                   page={tPage}
                   limit={tLimit}
-                  total={txQuery.data?.total || 0}
-                  onPage={(p) => setTPage(p)}
+                  total={txTotal}
+                  onPage={(p: number) => setTPage(p)}
                 />
               </>
             )}

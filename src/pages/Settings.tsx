@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-hot-toast";
+import { useSelector } from "react-redux";
 import { RestartTourButton } from "../tour/WalletTour";
 import {
-  useGetMyProfileQuery,
+  useLazyLookupUserQuery,
   useUpdateMyProfileMutation,
   useUpdateMyPasswordMutation,
 } from "../redux/api/profileApi";
 
-// Simple validators
-const isEmail = (s: string) => /\S+@\S+\.\S+/.test(s);
-const isPhone = (s: string) => /^[0-9+\-()\s]{6,}$/.test(s);
+// ---------------- Validators ----------------
+const isEmail = (s: string) => !!s && /\S+@\S+\.\S+/.test(s);
+const isPhone = (s: string) => !!s && /^[0-9+\-()\s]{6,}$/.test(s);
 
+// ---------------- Theme Toggle ----------------
 function ThemeToggle() {
   const [theme, setTheme] = useState(
     () => localStorage.getItem("theme") || "light"
@@ -22,9 +24,9 @@ function ThemeToggle() {
 
   return (
     <div className="flex items-center gap-3">
-      <span>Theme</span>
+      <span className="text-sm md:text-base">Theme</span>
       <button
-        id="theme-toggle" // tour anchor
+        id="theme-toggle"
         className="btn btn-outline btn-sm"
         onClick={() => setTheme(theme === "light" ? "dark" : "light")}
       >
@@ -34,15 +36,66 @@ function ThemeToggle() {
   );
 }
 
+// ---------------- Helpers (seed username for lookup) ----------------
+function decodeJwt(token?: string): any | null {
+  try {
+    if (!token) return null;
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function guessUsername(): string {
+  // localStorage then JWT payload fallbacks
+  try {
+    const lsUser = localStorage.getItem("user");
+    if (lsUser) {
+      const parsed = JSON.parse(lsUser);
+      if (parsed?.username) return String(parsed.username);
+    }
+    const lsUsername = localStorage.getItem("username");
+    if (lsUsername) return String(lsUsername);
+  } catch {}
+  try {
+    const token =
+      localStorage.getItem("token") ||
+      localStorage.getItem("access_token") ||
+      "";
+    const payload = decodeJwt(token);
+    const cand =
+      payload?.username || payload?.user?.username || payload?.sub || "";
+    return String(cand || "");
+  } catch {}
+  return "";
+}
+
+// ===================== SETTINGS =====================
 export default function Settings() {
-  // Fetch current user
-  const { data: me, isLoading: meLoading } = useGetMyProfileQuery();
+  // Prefill via /users/lookup
+  const reduxAuthUser = useSelector((s: any) => s?.auth?.user || s?.auth);
+  const initialUsername: string =
+    (reduxAuthUser && reduxAuthUser.username) || guessUsername();
+
+  const [triggerLookup, { data: me, isFetching: meLoading, isError: meErr }] =
+    useLazyLookupUserQuery();
 
   // Editable profile state
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [username, setUsername] = useState<string>(initialUsername || "");
+  const [email, setEmail] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");
 
+  // Load profile once we have a seed
+  useEffect(() => {
+    const seed = username || initialUsername || guessUsername();
+    if (seed) triggerLookup({ username: seed });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Hydrate the form from lookup
   useEffect(() => {
     if (me) {
       setUsername(me.username || "");
@@ -72,12 +125,20 @@ export default function Settings() {
   const submitProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSaveProfile) return toast.error("Please fix the form");
+
+    const payload: any = { username: username.trim() };
+    if (email.trim()) payload.email = email.trim();
+    if (phone.trim()) payload.phone = phone.trim();
+
     try {
-      await updateProfile({
-        username: username.trim(),
-        email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
-      }).unwrap();
+      const res = await updateProfile(payload).unwrap();
+      const updated = (res && (res as any).user) || {};
+      setUsername(updated.username ?? username);
+      setEmail(updated.email ?? email);
+      setPhone(updated.phone ?? phone);
+      // refresh via lookup to reflect backend normalization (e.g., phone digits)
+      const seed = updated.username || username;
+      if (seed) triggerLookup({ username: seed });
       toast.success("Profile updated");
     } catch (err: any) {
       toast.error(err?.data?.message || "Update failed");
@@ -103,45 +164,66 @@ export default function Settings() {
   };
 
   return (
-    <div className="container mx-auto px-3 py-8 space-y-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6 md:py-8 space-y-6">
+      <h1 className="text-2xl md:text-3xl font-semibold tracking-tight">
+        Settings
+      </h1>
 
       {/* Preferences */}
-      <div className="card bg-base-100 shadow">
+      <section className="card bg-base-100 shadow-sm border border-base-200">
         <div className="card-body space-y-4">
-          <h2 className="card-title">Preferences</h2>
-          <ThemeToggle />
-          <div className="flex items-center gap-3">
-            <span>Guided Tour</span>
-            <RestartTourButton />
+          <h2 className="card-title text-lg md:text-xl">Preferences</h2>
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <ThemeToggle />
+            <div className="flex items-center gap-3">
+              <span className="text-sm md:text-base">Guided Tour</span>
+              <RestartTourButton />
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Profile */}
-      <div className="card bg-base-100 shadow">
+      {/* Account */}
+      <section className="card bg-base-100 shadow-sm border border-base-200">
         <div className="card-body space-y-4">
-          <h2 className="card-title">Account</h2>
+          <h2 className="card-title text-lg md:text-xl">Account</h2>
 
           {meLoading ? (
-            <div className="space-y-2">
-              <div className="skeleton h-6 w-40" />
-              <div className="skeleton h-10 w-full" />
-              <div className="skeleton h-10 w-full" />
-              <div className="skeleton h-10 w-full" />
-              <div className="skeleton h-10 w-40" />
+            <div className="grid md:grid-cols-12 gap-x-6 gap-y-4">
+              <div className="md:col-span-6 space-y-2">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-10 w-full" />
+              </div>
+              <div className="md:col-span-6 space-y-2">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-10 w-full" />
+              </div>
+              <div className="md:col-span-8 space-y-2">
+                <div className="skeleton h-4 w-24" />
+                <div className="skeleton h-10 w-full" />
+              </div>
+              <div className="md:col-span-4 flex items-end justify-end">
+                <div className="skeleton h-10 w-40" />
+              </div>
+            </div>
+          ) : meErr ? (
+            <div className="alert alert-error">
+              <span>
+                Could not load your profile. You can still update it below.
+              </span>
             </div>
           ) : (
             <form
-              className="grid gap-3 md:grid-cols-2"
+              className="grid md:grid-cols-12 gap-x-6 gap-y-4"
               onSubmit={submitProfile}
             >
-              <div className="form-control">
-                <label className="label">
+              {/* Username */}
+              <div className="form-control md:col-span-6">
+                <label className="label pb-1">
                   <span className="label-text">Username</span>
                 </label>
                 <input
-                  className="input input-bordered"
+                  className="input input-bordered w-full"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="username"
@@ -149,37 +231,47 @@ export default function Settings() {
                 />
               </div>
 
-              <div className="form-control">
-                <label className="label">
+              {/* Email */}
+              <div className="form-control md:col-span-6">
+                <label className="label pb-1">
                   <span className="label-text">Email</span>
                 </label>
                 <input
-                  className="input input-bordered"
+                  className="input input-bordered w-full"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@example.com"
                 />
+                <label className="label pt-1">
+                  <span className="label-text-alt">
+                    Optional — e.g. you@domain.com
+                  </span>
+                </label>
               </div>
 
-              <div className="form-control">
-                <label className="label">
+              {/* Phone */}
+              <div className="form-control md:col-span-8">
+                <label className="label pb-1">
                   <span className="label-text">Phone</span>
                 </label>
                 <input
-                  className="input input-bordered"
+                  className="input input-bordered w-full"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+8801XXXXXXXXX"
                 />
+                <label className="label pt-1">
+                  <span className="label-text-alt">
+                    Optional — digits, +, -, ( ), spaces allowed
+                  </span>
+                </label>
               </div>
 
-              <div className="form-control md:items-end">
-                <label className="label">
-                  <span className="label-text opacity-0">Save</span>
-                </label>
+              {/* Save button aligned right on desktop, full width on mobile */}
+              <div className="md:col-span-4 flex md:justify-end items-end">
                 <button
-                  className={`btn btn-primary ${
+                  className={`btn btn-primary w-full md:w-auto ${
                     savingProfile ? "loading" : ""
                   }`}
                   disabled={!canSaveProfile || savingProfile}
@@ -190,19 +282,22 @@ export default function Settings() {
             </form>
           )}
         </div>
-      </div>
+      </section>
 
       {/* Change Password */}
-      <div className="card bg-base-100 shadow">
+      <section className="card bg-base-100 shadow-sm border border-base-200">
         <div className="card-body space-y-4">
-          <h2 className="card-title">Change Password</h2>
-          <form className="grid gap-3 md:grid-cols-2" onSubmit={submitPassword}>
-            <div className="form-control">
-              <label className="label">
+          <h2 className="card-title text-lg md:text-xl">Change Password</h2>
+          <form
+            className="grid md:grid-cols-12 gap-x-6 gap-y-4"
+            onSubmit={submitPassword}
+          >
+            <div className="form-control md:col-span-4">
+              <label className="label pb-1">
                 <span className="label-text">Old Password</span>
               </label>
               <input
-                className="input input-bordered"
+                className="input input-bordered w-full"
                 type="password"
                 value={oldPassword}
                 onChange={(e) => setOldPassword(e.target.value)}
@@ -211,37 +306,41 @@ export default function Settings() {
               />
             </div>
 
-            <div className="form-control">
-              <label className="label">
+            <div className="form-control md:col-span-4">
+              <label className="label pb-1">
                 <span className="label-text">New Password</span>
               </label>
               <input
-                className="input input-bordered"
+                className="input input-bordered w-full"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="New password"
                 required
+                minLength={6}
               />
             </div>
 
-            <div className="form-control md:col-span-2">
-              <label className="label">
+            <div className="form-control md:col-span-4">
+              <label className="label pb-1">
                 <span className="label-text">Confirm New Password</span>
               </label>
               <input
-                className="input input-bordered"
+                className="input input-bordered w-full"
                 type="password"
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="Re-enter new password"
                 required
+                minLength={6}
               />
             </div>
 
-            <div className="form-control md:items-end md:col-span-2">
+            <div className="md:col-span-12 flex md:justify-end">
               <button
-                className={`btn btn-outline ${savingPw ? "loading" : ""}`}
+                className={`btn btn-outline w-full md:w-auto ${
+                  savingPw ? "loading" : ""
+                }`}
                 disabled={savingPw}
               >
                 {savingPw ? "Updating..." : "Update Password"}
@@ -249,7 +348,7 @@ export default function Settings() {
             </div>
           </form>
         </div>
-      </div>
+      </section>
 
       {/* Role / meta (read-only) */}
       {me && (
@@ -259,7 +358,7 @@ export default function Settings() {
           </span>
           {typeof me.isApproved === "boolean" && (
             <span className="ml-4">
-              Agent approved: <b>{me.isApproved ? "Yes" : "No"}</b>
+              Approved: <b>{me.isApproved ? "Yes" : "No"}</b>
             </span>
           )}
         </div>

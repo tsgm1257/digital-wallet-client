@@ -63,7 +63,7 @@ export default function DashboardAgent() {
   const [lookupTrigger] = useLazyLookupUserQuery();
 
   // Forms state
-  const [recipient, setRecipient] = useState(""); // username/email/phone accepted
+  const [recipient, setRecipient] = useState("");
   const [amountIn, setAmountIn] = useState<number | "">("");
   const [amountOut, setAmountOut] = useState<number | "">("");
 
@@ -73,7 +73,6 @@ export default function DashboardAgent() {
       const amt = mode === "in" ? Number(amountIn) : Number(amountOut);
       if (!amt || amt <= 0) return toast.error("Enter a valid amount");
 
-      // Lookup user (backend cash-in/out needs username)
       const user = await lookupTrigger({ q: recipient.trim() }).unwrap();
       if (!user?.username) return toast.error("User not found");
 
@@ -94,7 +93,7 @@ export default function DashboardAgent() {
     }
   };
 
-  // ===== Local quick search input for current page (for tour + UX) =====
+  // ===== Local quick search =====
   const [q, setQ] = useState("");
   const filteredRows = useMemo(() => {
     const rows = txns?.data || [];
@@ -114,8 +113,15 @@ export default function DashboardAgent() {
   return (
     <div className="container mx-auto px-3 py-6 space-y-6">
       {/* ===== Quick actions ===== */}
-      <div id="stats-cards" className="grid gap-4 md:grid-cols-2">
-        <div className="card bg-base-100 shadow">
+      <div
+        id="stats-cards"
+        data-tour="balance-card-agent"
+        className="grid gap-4 md:grid-cols-2"
+      >
+        <div
+          data-tour="process-cashout-form"
+          className="card bg-base-100 shadow"
+        >
           <div className="card-body space-y-3">
             <h3 className="card-title">Cash In (to User)</h3>
             <input
@@ -177,7 +183,11 @@ export default function DashboardAgent() {
       </div>
 
       {/* ===== Charts ===== */}
-      <div id="chart-area" className="card bg-base-100 shadow">
+      <div
+        id="chart-area"
+        data-tour="charts-agent"
+        className="card bg-base-100 shadow"
+      >
         <div className="card-body">
           <h3 className="card-title">Agent Activity (Last 30 days)</h3>
           {chartLoading ? (
@@ -192,8 +202,11 @@ export default function DashboardAgent() {
         </div>
       </div>
 
-      {/* ===== Handled transactions (history) ===== */}
-      <div className="card bg-base-100 shadow">
+      {/* ===== Transactions history ===== */}
+      <div
+        data-tour="recent-tx-table-agent"
+        className="card bg-base-100 shadow"
+      >
         <div className="card-body">
           <div className="flex items-center justify-between mb-4">
             <h3 className="card-title">Handled Transactions</h3>
