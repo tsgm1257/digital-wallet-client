@@ -78,9 +78,9 @@ export default function AreaVolumeChart({ data }: { data: SeriesRow[] }) {
 
           <Tooltip
             labelFormatter={(label) => `Date: ${fmtDate(String(label))}`}
-            formatter={(value: any, name: any) => [
+            formatter={(value: number | string, name: string) => [
               fmtNum(Number(value)),
-              String(name),
+              name,
             ]}
             cursor={{ fill: "rgba(0,0,0,0.04)" }}
           />

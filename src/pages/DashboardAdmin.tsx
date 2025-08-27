@@ -55,7 +55,7 @@ interface TxRow {
   amount: number;
   sender?: UserRow;
   receiver?: UserRow;
-  status: "completed" | "failed" | string;
+  status: "completed" | "failed";
   createdAt?: string;
 }
 
@@ -325,16 +325,6 @@ export default function DashboardAdmin() {
         <section className="card bg-base-100 shadow">
           <div className="card-body">
             <h3 className="card-title">Users</h3>
-
-            {/* Small helper anchor for the tour to talk about approvals */}
-            <div
-              data-tour="approve-agents-table"
-              className="alert alert-info mb-3"
-              role="note"
-            >
-              Agent approvals happen here. Filter Role = <b>Agent</b>, then use
-              Approve/Suspend in the Actions column.
-            </div>
 
             <div className="grid md:grid-cols-5 gap-3 mb-4">
               <select

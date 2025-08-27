@@ -9,6 +9,7 @@ import {
   useGetMyTransactionsQuery,
   useSendMoneyMutation,
   type TxType,
+  type TxStatus,
 } from "../redux/api/txnApi";
 import AreaVolumeChart from "../components/charts/AreaVolumeChart";
 import PieTypeChart from "../components/charts/PieTypeChart";
@@ -20,17 +21,15 @@ interface Wallet {
   balance?: number;
 }
 
-interface UserLite {
-  username?: string;
-}
+type UserRef = string | { _id: string; username?: string; email?: string };
 
 interface TxRow {
   _id: string;
   type: TxType; // "send" | "withdraw" | "deposit"
   amount: number;
-  sender?: UserLite;
-  receiver?: UserLite;
-  status: "completed" | "failed" | string;
+  sender?: UserRef;
+  receiver?: UserRef;
+  status: TxStatus;
   createdAt?: string;
 }
 
@@ -171,8 +170,14 @@ export default function DashboardUser() {
     const qq = q.trim().toLowerCase();
     if (!qq) return rows;
     return rows.filter((t) => {
-      const sender = String(t.sender?.username || "").toLowerCase();
-      const receiver = String(t.receiver?.username || "").toLowerCase();
+      const sender =
+        typeof t.sender === "string"
+          ? t.sender.toLowerCase()
+          : String(t.sender?.username || t.sender?._id || "").toLowerCase();
+      const receiver =
+        typeof t.receiver === "string"
+          ? t.receiver.toLowerCase()
+          : String(t.receiver?.username || t.receiver?._id || "").toLowerCase();
       return (
         sender.includes(qq) ||
         receiver.includes(qq) ||
@@ -407,8 +412,16 @@ export default function DashboardUser() {
                       <tr key={t._id}>
                         <td className="capitalize">{t.type}</td>
                         <td>${Number(t.amount).toFixed(2)}</td>
-                        <td>{t.sender?.username || "-"}</td>
-                        <td>{t.receiver?.username || "-"}</td>
+                        <td>
+                          {typeof t.sender === "string"
+                            ? t.sender
+                            : t.sender?.username || "-"}
+                        </td>
+                        <td>
+                          {typeof t.receiver === "string"
+                            ? t.receiver
+                            : t.receiver?.username || "-"}
+                        </td>
                         <td className="capitalize">{t.status}</td>
                         <td>
                           {t.createdAt

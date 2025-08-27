@@ -37,13 +37,14 @@ function ThemeToggle() {
 }
 
 // ---------------- Helpers (seed username for lookup) ----------------
-function decodeJwt(token?: string): any | null {
+function decodeJwt(token?: string): Record<string, unknown> | null {
   try {
     if (!token) return null;
     const [, payload] = token.split(".");
     if (!payload) return null;
     const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
-    return JSON.parse(json);
+    const parsed = JSON.parse(json);
+    return parsed as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -59,24 +60,73 @@ function guessUsername(): string {
     }
     const lsUsername = localStorage.getItem("username");
     if (lsUsername) return String(lsUsername);
-  } catch {}
+  } catch (err) {
+    // ignore localStorage/JSON errors but surface in development
+    if (
+      (globalThis as unknown as {
+        process?: { env?: { NODE_ENV?: string } };
+      }).process?.env?.NODE_ENV !== "production"
+    ) {
+      
+      console.warn("guessUsername (localStorage) error:", err);
+    }
+  }
+
   try {
     const token =
       localStorage.getItem("token") ||
       localStorage.getItem("access_token") ||
       "";
     const payload = decodeJwt(token);
-    const cand =
-      payload?.username || payload?.user?.username || payload?.sub || "";
-    return String(cand || "");
-  } catch {}
+    if (!payload) return "";
+    const p = payload as Record<string, unknown>;
+
+    if (typeof p.username === "string") {
+      return p.username;
+    }
+    if (p.user && typeof p.user === "object") {
+      const u = p.user as Record<string, unknown>;
+      if (typeof u.username === "string") return u.username;
+    }
+  } catch (err) {
+    // ignore token/parse errors but surface in development
+    if (
+      (globalThis as unknown as {
+        process?: { env?: { NODE_ENV?: string } };
+      }).process?.env?.NODE_ENV !== "production"
+    ) {
+      
+      console.warn("guessUsername (token) error:", err);
+    }
+  }
+
   return "";
 }
 
 // ===================== SETTINGS =====================
 export default function Settings() {
   // Prefill via /users/lookup
-  const reduxAuthUser = useSelector((s: any) => s?.auth?.user || s?.auth);
+  type User = {
+    username?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    isApproved?: boolean;
+    [k: string]: unknown;
+  };
+  type AuthSlice = { user?: User } | User;
+  type RootState = { auth?: AuthSlice };
+
+  const reduxAuthUser = useSelector((s: RootState) => {
+    const auth = s?.auth;
+    if (!auth) return undefined;
+    // If the auth slice has a `user` property, return that; otherwise auth itself is the user object
+    if (typeof auth === "object" && "user" in auth) {
+      return (auth as { user?: User }).user;
+    }
+    return auth as User;
+  });
+
   const initialUsername: string =
     (reduxAuthUser && reduxAuthUser.username) || guessUsername();
 
@@ -126,13 +176,29 @@ export default function Settings() {
     e.preventDefault();
     if (!canSaveProfile) return toast.error("Please fix the form");
 
-    const payload: any = { username: username.trim() };
+    type ProfileUpdate = {
+      username: string;
+      email?: string;
+      phone?: string;
+    };
+    const payload: ProfileUpdate = { username: username.trim() };
     if (email.trim()) payload.email = email.trim();
     if (phone.trim()) payload.phone = phone.trim();
 
     try {
       const res = await updateProfile(payload).unwrap();
-      const updated = (res && (res as any).user) || {};
+      // Response may be either { user: User } or User directly — extract safely without `any`
+      const updated: User = (() => {
+        if (!res || typeof res !== "object") return {};
+        const r = res as Record<string, unknown>;
+        if ("user" in r) {
+          const u = r.user as unknown;
+          if (u && typeof u === "object") return u as User;
+          return {};
+        }
+        return r as User;
+      })();
+
       setUsername(updated.username ?? username);
       setEmail(updated.email ?? email);
       setPhone(updated.phone ?? phone);
@@ -140,8 +206,21 @@ export default function Settings() {
       const seed = updated.username || username;
       if (seed) triggerLookup({ username: seed });
       toast.success("Profile updated");
-    } catch (err: any) {
-      toast.error(err?.data?.message || "Update failed");
+    } catch (err: unknown) {
+      const getMessage = (): string => {
+        if (!err) return "Update failed";
+        if (typeof err === "string") return err;
+        if (typeof err === "object" && err !== null) {
+          const maybe = err as { data?: unknown; message?: unknown };
+          if (maybe.data && typeof maybe.data === "object" && maybe.data !== null) {
+            const maybeMsg = (maybe.data as { message?: unknown }).message;
+            if (typeof maybeMsg === "string") return maybeMsg;
+          }
+          if (typeof maybe.message === "string") return maybe.message;
+        }
+        return "Update failed";
+      };
+      toast.error(getMessage());
     }
   };
 
@@ -158,8 +237,21 @@ export default function Settings() {
       setOldPassword("");
       setNewPassword("");
       setConfirm("");
-    } catch (err: any) {
-      toast.error(err?.data?.message || "Password change failed");
+    } catch (err: unknown) {
+      const msg = (() => {
+        if (!err) return "Password change failed";
+        if (typeof err === "string") return err;
+        if (typeof err === "object" && err !== null) {
+          const e = err as Record<string, unknown>;
+          if (e.data && typeof e.data === "object" && e.data !== null) {
+            const d = e.data as Record<string, unknown>;
+            if (typeof d.message === "string") return d.message;
+          }
+          if (typeof e.message === "string") return e.message;
+        }
+        return "Password change failed";
+      })();
+      toast.error(msg);
     }
   };
 

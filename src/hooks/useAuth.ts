@@ -2,7 +2,12 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../app/store";
 import { jwtDecode } from "jwt-decode";
 
-type Payload = { userId: string; role: "user" | "agent" | "admin"; iat?: number; exp?: number };
+type Payload = {
+  userId: string;
+  role: "user" | "agent" | "admin";
+  iat?: number;
+  exp?: number;
+};
 
 export function useAuth() {
   const token = useSelector((s: RootState) => s.auth.token);
@@ -15,7 +20,7 @@ export function useAuth() {
       role = p.role;
       userId = p.userId;
     } catch {
-        // invalid token
+      // invalid token
     }
   }
   return { token, role, userId, isLoggedIn: !!token };

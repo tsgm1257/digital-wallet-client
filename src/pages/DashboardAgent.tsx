@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ChangeEvent } from "react";
 import { toast } from "react-hot-toast";
 import {
   useGetMyTransactionsQuery,
@@ -88,8 +88,10 @@ export default function DashboardAgent() {
 
       setRecipient("");
       refetchTxns();
-    } catch (e: any) {
-      toast.error(e?.data?.message || "Operation failed");
+    } catch (e: unknown) {
+      type Err = { data?: { message?: string } };
+      const err = e as Err;
+      toast.error(err?.data?.message || "Operation failed");
     }
   };
 
@@ -100,8 +102,14 @@ export default function DashboardAgent() {
     const qq = q.trim().toLowerCase();
     if (!qq) return rows;
     return rows.filter((t) => {
-      const sender = String(t.sender?.username || "").toLowerCase();
-      const receiver = String(t.receiver?.username || "").toLowerCase();
+      const sender =
+        typeof t.sender === "string"
+          ? t.sender.toLowerCase()
+          : String(t.sender?.username || "").toLowerCase();
+      const receiver =
+        typeof t.receiver === "string"
+          ? t.receiver.toLowerCase()
+          : String(t.receiver?.username || "").toLowerCase();
       return (
         sender.includes(qq) ||
         receiver.includes(qq) ||
@@ -224,7 +232,9 @@ export default function DashboardAgent() {
             <select
               className="select select-bordered"
               value={type}
-              onChange={(e) => setType(e.target.value as any)}
+              onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+                setType(e.target.value as TxType | "")
+              }
             >
               <option value="">All Types</option>
               <option value="deposit">Deposit (cash-in)</option>
@@ -285,8 +295,16 @@ export default function DashboardAgent() {
                       <tr key={t._id}>
                         <td className="capitalize">{t.type}</td>
                         <td>${Number(t.amount).toFixed(2)}</td>
-                        <td>{t.sender?.username || "-"}</td>
-                        <td>{t.receiver?.username || "-"}</td>
+                        <td>
+                          {typeof t.sender === "string"
+                            ? t.sender
+                            : t.sender?.username || "-"}
+                        </td>
+                        <td>
+                          {typeof t.receiver === "string"
+                            ? t.receiver
+                            : t.receiver?.username || "-"}
+                        </td>
                         <td className="capitalize">{t.status}</td>
                         <td>
                           {t.createdAt

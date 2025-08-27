@@ -3,10 +3,12 @@ import { baseApi } from "./baseApi";
 export type TxType = "send" | "withdraw" | "deposit";
 export type TxStatus = "completed" | "failed";
 
+export type UserRef = string | { _id: string; username?: string; email?: string };
+
 export interface Transaction {
   _id: string;
-  sender?: any;
-  receiver?: any;
+  sender?: UserRef;
+  receiver?: UserRef;
   amount: number;
   type: TxType;
   status: TxStatus;
@@ -39,7 +41,7 @@ export const txnApi = baseApi.injectEndpoints({
   endpoints: (builder) => ({
     getMyTransactions: builder.query<
       Paginated<Transaction>,
-      GetMyTxParams | void
+      GetMyTxParams | undefined
     >({
       query: (params) => ({ url: "/transactions/me", params }),
       providesTags: ["Txns", "Wallet", "Stats"],
@@ -48,8 +50,8 @@ export const txnApi = baseApi.injectEndpoints({
     sendMoney: builder.mutation<{ message: string }, SendPayload>({
       query: (payload) => {
         const recipient =
-          (payload as any).recipient ?? (payload as any).recipientUsername;
-        const amount = Number((payload as any).amount);
+          "recipient" in payload ? payload.recipient : payload.recipientUsername;
+        const amount = Number(payload.amount);
         return {
           url: "/transactions/send",
           method: "POST",

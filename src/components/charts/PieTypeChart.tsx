@@ -57,7 +57,7 @@ export default function PieTypeChart({ data }: { data: Slice[] }) {
             innerRadius="45%"
             outerRadius="75%"
             isAnimationActive
-            label={({ name, percent }) =>
+            label={({ name, percent = 0 }) =>
               `${name}: ${(percent * 100).toFixed(0)}%`
             }
             labelLine={false}
@@ -72,7 +72,7 @@ export default function PieTypeChart({ data }: { data: Slice[] }) {
             ))}
           </Pie>
           <Tooltip
-            formatter={(val: any, name: any) => [val, String(name)]}
+            formatter={(val: number | string, name: string) => [val, String(name)]}
             cursor={{ fill: "rgba(0,0,0,0.04)" }}
           />
           <Legend />

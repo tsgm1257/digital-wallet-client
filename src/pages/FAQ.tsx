@@ -130,7 +130,7 @@ function useFlattenedQA(data: typeof ALL_QA) {
       Object.entries(data).flatMap(([section, items]) =>
         items.map((x) => ({ ...x, section }))
       ),
-    []
+    [data]
   );
 }
 

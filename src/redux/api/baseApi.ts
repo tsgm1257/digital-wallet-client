@@ -6,8 +6,9 @@ export const baseApi = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({
     baseUrl: `${baseUrl}/api`,
-    prepareHeaders: (headers, { getState }: any) => {
-      const token = getState()?.auth?.token;
+    prepareHeaders: (headers, { getState }) => {
+      const state = getState ? (getState() as { auth?: { token?: string } } | undefined) : undefined;
+      const token = state?.auth?.token;
       if (token) headers.set("authorization", `Bearer ${token}`);
       return headers;
     },

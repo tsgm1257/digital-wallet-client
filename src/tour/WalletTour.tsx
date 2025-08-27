@@ -1,9 +1,10 @@
 // src/tour/WalletTour.tsx
 import { TourProvider, useTour } from "@reactour/tour";
 import type { StepType } from "@reactour/tour";
-import { ReactNode, useEffect, useMemo } from "react";
+import type { ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { useAuth } from "../hooks/useAuth"; // named import
+import { useAuth } from "../hooks/useAuth";
 
 const ROUTES = {
   userDashboard: "/dashboard/user",
@@ -13,6 +14,8 @@ const ROUTES = {
 };
 
 type Role = "user" | "agent" | "admin";
+
+const SAFE_FALLBACK_SELECTOR = "body";
 
 function waitForElem(
   selector: string,
@@ -46,7 +49,8 @@ function scrollIntoCenter(el: HTMLElement | null) {
   }
 }
 
-type NavStep = StepType & {
+type NavStep = Omit<StepType, "selector"> & {
+  selector?: string;
   route?: string;
   key?: string;
   afterRouteDelayMs?: number;
@@ -59,6 +63,7 @@ function buildStepsForRole(role: Role): NavStep[] {
         key: "welcome",
         content: "Welcome Agent! Let’s tour your dashboard.",
         route: ROUTES.agentDashboard,
+        selector: SAFE_FALLBACK_SELECTOR,
       },
       {
         key: "balance",
@@ -91,7 +96,11 @@ function buildStepsForRole(role: Role): NavStep[] {
         afterRouteDelayMs: 250,
         content: "Profile & security settings.",
       },
-      { key: "done", content: "All set! You’re ready to work efficiently." },
+      {
+        key: "done",
+        content: "All set! You’re ready to work efficiently.",
+        selector: SAFE_FALLBACK_SELECTOR,
+      },
     ];
   }
   if (role === "admin") {
@@ -100,6 +109,7 @@ function buildStepsForRole(role: Role): NavStep[] {
         key: "welcome",
         content: "Welcome Admin! Quick tour.",
         route: ROUTES.adminDashboard,
+        selector: SAFE_FALLBACK_SELECTOR,
       },
       {
         key: "balance",
@@ -132,7 +142,11 @@ function buildStepsForRole(role: Role): NavStep[] {
         afterRouteDelayMs: 250,
         content: "Platform settings.",
       },
-      { key: "done", content: "You’re set to administer the platform." },
+      {
+        key: "done",
+        content: "You’re set to administer the platform.",
+        selector: SAFE_FALLBACK_SELECTOR,
+      },
     ];
   }
   // user
@@ -141,6 +155,7 @@ function buildStepsForRole(role: Role): NavStep[] {
       key: "welcome",
       content: "Welcome! Let’s tour your wallet.",
       route: ROUTES.userDashboard,
+      selector: SAFE_FALLBACK_SELECTOR,
     },
     {
       key: "balance",
@@ -179,15 +194,18 @@ function buildStepsForRole(role: Role): NavStep[] {
       afterRouteDelayMs: 250,
       content: "Manage profile & security.",
     },
-    { key: "done", content: "Tour complete — enjoy your wallet!" },
+    {
+      key: "done",
+      content: "Tour complete — enjoy your wallet!",
+      selector: SAFE_FALLBACK_SELECTOR,
+    },
   ];
 }
 
 /** Inside <Router/>. Builds steps, injects them, and opens only after steps are set. */
 export function WalletTourSync() {
-  const auth = useAuth() as any;
-  const role: Role =
-    (auth?.user?.role as Role) || (auth?.role as Role) || "user";
+  const auth = useAuth();
+  const role: Role = (auth.role ?? "user") as Role;
   const steps = useMemo<NavStep[]>(() => buildStepsForRole(role), [role]);
 
   const navigate = useNavigate();
@@ -198,12 +216,19 @@ export function WalletTourSync() {
     setSteps,
     setIsOpen,
     setCurrentStep,
-    steps: ctxSteps,
   } = useTour();
 
   // Keep provider's steps in sync with role
   useEffect(() => {
-    setSteps(steps);
+    const normalized: StepType[] = steps.map((s) => ({
+      ...s,
+      
+      selector:
+        s.selector && s.selector.trim().length > 0
+          ? s.selector
+          : SAFE_FALLBACK_SELECTOR,
+    }));
+    setSteps?.(normalized);
   }, [steps, setSteps]);
 
   // Route & focus on each step
@@ -220,10 +245,10 @@ export function WalletTourSync() {
           await new Promise((r) => setTimeout(r, step.afterRouteDelayMs));
         }
       }
-      if (step.selector) {
-        const el = await waitForElem(step.selector, { timeoutMs: 8000 });
-        if (!cancelled) scrollIntoCenter(el);
-      }
+      const selector =
+        (step.selector && step.selector.trim()) || SAFE_FALLBACK_SELECTOR;
+      const el = await waitForElem(selector, { timeoutMs: 8000 });
+      if (!cancelled) scrollIntoCenter(el);
     })();
     return () => {
       cancelled = true;
@@ -236,16 +261,16 @@ export function WalletTourSync() {
       type="button"
       className="fixed bottom-5 right-5 btn btn-primary shadow-lg z-[99999]"
       onClick={() => {
-        setSteps(steps);
-        if (!ctxSteps || ctxSteps.length <= 1) {
-          queueMicrotask(() => {
-            setCurrentStep(0);
-            setIsOpen(true);
-          });
-        } else {
-          setCurrentStep(0);
-          setIsOpen(true);
-        }
+        const normalized: StepType[] = steps.map((s) => ({
+          ...s,
+          selector:
+            s.selector && s.selector.trim().length > 0
+              ? s.selector
+              : SAFE_FALLBACK_SELECTOR,
+        }));
+        setSteps?.(normalized);
+        setCurrentStep(0);
+        setIsOpen(true);
       }}
       aria-label="Start tour"
     >
@@ -277,7 +302,10 @@ export default function WalletTourProvider({
 }: {
   children: ReactNode;
 }) {
-  const defaultSteps: StepType[] = [{ content: "Loading tour…" }];
+  
+  const defaultSteps: StepType[] = [
+    { selector: SAFE_FALLBACK_SELECTOR, content: "Loading tour…" },
+  ];
   return (
     <TourProvider
       steps={defaultSteps}

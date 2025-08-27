@@ -30,8 +30,17 @@ export default function Login() {
           ? "/dashboard/agent"
           : "/dashboard/user";
       navigate(target);
-    } catch (e: any) {
-      toast.error(e?.data?.message || "Login failed");
+    } catch (err: unknown) {
+      let message = "Login failed";
+      if (typeof err === "object" && err !== null) {
+        const eObj = err as { data?: { message?: string }; message?: string };
+        if (eObj.data && typeof eObj.data.message === "string") {
+          message = eObj.data.message;
+        } else if (typeof eObj.message === "string") {
+          message = eObj.message;
+        }
+      }
+      toast.error(message);
     }
   };
 
