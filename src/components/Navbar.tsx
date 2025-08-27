@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router"; // per your preference
 import { useDispatch } from "react-redux";
+import { FiSun, FiMoon, FiUser } from "react-icons/fi";
 import { logout } from "../app/store";
 import { useAuth } from "../hooks/useAuth";
 
@@ -26,22 +27,9 @@ const ThemeToggleDesktop = () => {
         onChange={(e) => setIsDark(e.target.checked)}
         aria-label="Toggle theme"
       />
-      {/* sun */}
-      <svg
-        className="swap-off h-6 w-6 fill-current"
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-      >
-        <path d="M5.64 17l-.71.71a1 1 0 101.41 1.41l.71-.71A1 1 0 105.64 17zM4 12a1 1 0 100 2 1 1 0 000-2zm7-8a1 1 0 011-1 1 1 0 011 1v1a1 1 0 11-2 0V4zm7.36 3.64a1 1 0 10-1.41-1.41l-.71.71a1 1 0 101.41 1.41l.71-.71zM12 6a6 6 0 100 12 6 6 0 000-12zm7 5a1 1 0 100 2 1 1 0 000-2zm-1.64 7l.71.71a1 1 0 001.41-1.41l-.71-.71a1 1 0 10-1.41 1.41zM12 20a1 1 0 00-1 1v1a1 1 0 102 0v-1a1 1 0 00-1-1zM3.64 6.64l.71-.71A1 1 0 003 4.52a1 1 0 00-.71.29l-.71.71A1 1 0 103.64 6.64z" />
-      </svg>
-      {/* moon */}
-      <svg
-        className="swap-on h-6 w-6 fill-current"
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-      >
-        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-      </svg>
+      {/* sun / moon icons */}
+      <FiSun className="swap-off h-6 w-6" />
+      <FiMoon className="swap-on h-6 w-6" />
     </label>
   );
 };
@@ -95,23 +83,14 @@ const AvatarWithTooltip = ({
   name?: string;
   photoURL?: string | null;
 }) => {
-  const initials = useMemo(() => {
-    if (!name) return "U";
-    return name
-      .split(" ")
-      .map((n) => n[0]?.toUpperCase())
-      .join("")
-      .slice(0, 2);
-  }, [name]);
-
   return (
     <div className="tooltip tooltip-bottom" data-tip={name || "User"}>
       <div className="avatar placeholder">
-        <div className="bg-primary text-primary-content w-9 rounded-full">
+        <div className="bg-primary text-primary-content w-9 rounded-full flex items-center justify-center">
           {photoURL ? (
             <img src={photoURL} alt={name || "User"} />
           ) : (
-            <span className="text-sm">{initials}</span>
+            <FiUser className="text-lg" />
           )}
         </div>
       </div>
@@ -150,7 +129,7 @@ const Navbar = () => {
     navigate("/");
   };
 
-  // Optional: outside-click / Esc to close
+  // close mobile menu on outside click / Esc
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (
@@ -174,11 +153,9 @@ const Navbar = () => {
 
   return (
     <header className="sticky top-0 z-50 border-b bg-base-100/80 backdrop-blur">
-      {/* Container = consistent horizontal padding */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        {/* 3-column flex on desktop; brand + hamburger on mobile */}
         <div className="flex items-center gap-4 py-3">
-          {/* LEFT (brand) */}
+          {/* LEFT */}
           <div className="md:basis-1/3">
             <Link
               to="/"
@@ -188,14 +165,28 @@ const Navbar = () => {
             </Link>
           </div>
 
-          {/* CENTER (links) — truly centered on lg+ */}
-          <div className="hidden lg:flex lg:basis-1/3 justify-center">
+          {/* CENTER */}
+          <div className="hidden lg:flex lg:basis-1/1 justify-center">
             <DesktopLinks />
           </div>
 
-          {/* RIGHT (actions) — pushed to far right on lg+ */}
+          {/* RIGHT (desktop) */}
           <div className="hidden lg:flex lg:basis-1/3 lg:justify-end lg:items-center lg:gap-3">
             <ThemeToggleDesktop />
+            {isLoggedIn && (
+              <Link
+                to={
+                  role === "admin"
+                    ? "/dashboard/admin"
+                    : role === "agent"
+                    ? "/dashboard/agent"
+                    : "/dashboard/user"
+                }
+                className="btn btn-outline"
+              >
+                Dashboard
+              </Link>
+            )}
             {!isLoggedIn ? (
               <>
                 <Link to="/login" className="btn btn-ghost">
@@ -215,7 +206,7 @@ const Navbar = () => {
             )}
           </div>
 
-          {/* MOBILE hamburger (far right) + compact menu OUTSIDE navbar flow */}
+          {/* MOBILE menu */}
           <div className="ml-auto lg:hidden relative">
             <button
               className="btn btn-ghost btn-square"
@@ -245,39 +236,19 @@ const Navbar = () => {
                            shadow-xl bg-base-100 p-4 flex flex-col items-center text-center gap-3 z-[60]"
               >
                 {/* Links */}
-                <Link
-                  to="/"
-                  onClick={() => setOpen(false)}
-                  className="hover:underline"
-                >
+                <Link to="/" onClick={() => setOpen(false)}>
                   Home
                 </Link>
-                <Link
-                  to="/features"
-                  onClick={() => setOpen(false)}
-                  className="hover:underline"
-                >
+                <Link to="/features" onClick={() => setOpen(false)}>
                   Features
                 </Link>
-                <Link
-                  to="/about"
-                  onClick={() => setOpen(false)}
-                  className="hover:underline"
-                >
+                <Link to="/about" onClick={() => setOpen(false)}>
                   About
                 </Link>
-                <Link
-                  to="/faq"
-                  onClick={() => setOpen(false)}
-                  className="hover:underline"
-                >
+                <Link to="/faq" onClick={() => setOpen(false)}>
                   FAQ
                 </Link>
-                <Link
-                  to="/contact"
-                  onClick={() => setOpen(false)}
-                  className="hover:underline"
-                >
+                <Link to="/contact" onClick={() => setOpen(false)}>
                   Contact
                 </Link>
 
@@ -303,6 +274,19 @@ const Navbar = () => {
                   </>
                 ) : (
                   <>
+                    <Link
+                      to={
+                        role === "admin"
+                          ? "/dashboard/admin"
+                          : role === "agent"
+                          ? "/dashboard/agent"
+                          : "/dashboard/user"
+                      }
+                      onClick={() => setOpen(false)}
+                      className="btn btn-outline w-full"
+                    >
+                      Dashboard
+                    </Link>
                     <span className="opacity-70">
                       Hello, {displayName || "User"}
                     </span>
@@ -315,7 +299,6 @@ const Navbar = () => {
                   </>
                 )}
 
-                {/* Theme toggle AFTER auth buttons, as text button */}
                 <ThemeToggleMobileButton />
               </div>
             )}
