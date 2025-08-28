@@ -210,19 +210,14 @@ export function WalletTourSync() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    isOpen,
-    currentStep,
-    setSteps,
-    setIsOpen,
-    setCurrentStep,
-  } = useTour();
+  const { isOpen, currentStep, setSteps, setIsOpen, setCurrentStep } =
+    useTour();
 
   // Keep provider's steps in sync with role
   useEffect(() => {
     const normalized: StepType[] = steps.map((s) => ({
       ...s,
-      
+
       selector:
         s.selector && s.selector.trim().length > 0
           ? s.selector
@@ -255,8 +250,33 @@ export function WalletTourSync() {
     };
   }, [isOpen, currentStep, location.pathname, navigate, steps]);
 
-  // Start button colocated with steps
-  return (
+  // Auto-run the tour once per role (only when logged in)
+  useEffect(() => {
+    if (!auth.isLoggedIn) return;
+    const key = `dw_tour_done_${role}`;
+    const done = typeof window !== "undefined" && localStorage.getItem(key);
+    if (!done) {
+      const normalized: StepType[] = steps.map((s) => ({
+        ...s,
+        selector:
+          s.selector && s.selector.trim().length > 0
+            ? s.selector
+            : SAFE_FALLBACK_SELECTOR,
+      }));
+      setSteps?.(normalized);
+      setCurrentStep(0);
+      setIsOpen(true);
+      try {
+        localStorage.setItem(key, "1");
+      } catch {
+        // Ignore errors from localStorage (e.g., quota exceeded, private mode)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, auth.isLoggedIn]);
+
+  // Start button colocated with steps (only show when logged in)
+  return auth.isLoggedIn ? (
     <button
       type="button"
       className="fixed bottom-5 right-5 btn btn-primary shadow-lg z-[99999]"
@@ -276,7 +296,7 @@ export function WalletTourSync() {
     >
       Start Tour
     </button>
-  );
+  ) : null;
 }
 
 /** Named export kept for Settings.tsx compatibility */
@@ -302,7 +322,6 @@ export default function WalletTourProvider({
 }: {
   children: ReactNode;
 }) {
-  
   const defaultSteps: StepType[] = [
     { selector: SAFE_FALLBACK_SELECTOR, content: "Loading tour…" },
   ];
