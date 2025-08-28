@@ -4,10 +4,10 @@ Modern, role-based React application for a Digital Wallet System (bKash/Nagad st
 
 ### Live
 
-- Frontend: <your-frontend-url>
+- Frontend: https://digital-wallet-client-eight.vercel.app/
 - Backend API: https://digital-wallet-api-beta.vercel.app
 
-Replace the above with your deployed URLs.
+Replace the above with your deployed URLs if they change.
 
 ### Tech Stack
 
